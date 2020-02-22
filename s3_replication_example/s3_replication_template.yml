@@ -1,0 +1,72 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Description: Test template for setting up S3 buckets with replication.
+
+Resources:
+  DestinationBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: tlo-destination-bucket
+      VersioningConfiguration:
+        Status: Enabled
+  
+  ReplicationRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - s3.amazonaws.com
+            Action:
+              - sts:AssumeRole
+            
+  ReplicationRolePolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: ReplicationRolePolicy
+      Roles:
+        - !Ref ReplicationRole
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - s3:GetObjectVersionForReplication
+              - s3:GetObjectVersionAcl
+            Resource:
+              - !Join ['', [!GetAtt SourceBucket.Arn, '/*']]
+          - Effect: Allow
+            Action:
+              - s3:ListBucket
+              - s3:GetReplicationConfiguration
+            Resource:
+              - !GetAtt SourceBucket.Arn
+          - Effect: Allow
+            Action:
+              - s3:ReplicateObject
+              - s3:ReplicateDelete
+              - s3:ReplicateTags
+              - s3:GetObjectVersionTagging
+            Resource:
+              - !Join ['', [!GetAtt DestinationBucket.Arn, '/*']]
+
+  SourceBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: tlo-source-bucket
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      ReplicationConfiguration:
+        Role: !GetAtt ReplicationRole.Arn
+        Rules:
+          - Destination:
+              Bucket: !GetAtt DestinationBucket.Arn
+            Prefix: ''
+            Status: Enabled
